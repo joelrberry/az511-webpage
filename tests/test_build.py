@@ -540,25 +540,31 @@ class TestRenderMessageBoardsSection:
     def test_empty_boards_returns_empty_string(self):
         assert render_message_boards_section([]) == ""
 
-    def test_contains_message_boards_label(self, sample_board):
+    def test_roadway_name_in_summary(self, sample_board):
         html = render_message_boards_section([sample_board])
-        assert "Message Boards" in html
+        assert "I-10" in html
 
     def test_count_in_summary(self, sample_board):
         html = render_message_boards_section([sample_board])
         assert "1 board" in html
 
-    def test_plural_noun_for_multiple_boards(self, sample_board, sample_board_empty_messages):
-        html = render_message_boards_section([sample_board, sample_board_empty_messages])
+    def test_plural_noun_for_multiple_boards_same_roadway(self, sample_board):
+        board2 = {**sample_board, "id": "mb3"}
+        html = render_message_boards_section([sample_board, board2])
         assert "2 boards" in html
 
-    def test_details_open_by_default(self, sample_board):
-        html = render_message_boards_section([sample_board])
+    def test_each_roadway_gets_its_own_details(self, sample_board, sample_board_empty_messages):
+        html = render_message_boards_section([sample_board, sample_board_empty_messages])
+        assert html.count("<details") == 2
+
+    def test_first_roadway_open(self, sample_board, sample_board_empty_messages):
+        html = render_message_boards_section([sample_board, sample_board_empty_messages])
         assert "<details open>" in html
 
-    def test_roadway_label_present(self, sample_board):
-        html = render_message_boards_section([sample_board])
-        assert "I-10" in html
+    def test_subsequent_roadway_closed(self, sample_board, sample_board_empty_messages):
+        # I-10 sorts before SR-101; SR-101 section should not be open
+        html = render_message_boards_section([sample_board, sample_board_empty_messages])
+        assert html.count("<details open>") == 1
 
     def test_board_card_included(self, sample_board):
         html = render_message_boards_section([sample_board])

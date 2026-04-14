@@ -19,8 +19,8 @@ build.py  →  az511.html  (4-tab layout: Map | Weather | Message Boards | Camer
 The HTML page has a sticky tab bar (URL hash navigation: `#map`, `#weather`, `#boards`, `#cameras`):
 - **Map** — Leaflet.js (CartoDB Voyager tiles), blue pins for cameras, amber pins for VMS boards, color-coded pins for weather stations
 - **Weather** — Grid of weather station cards color-coded by road grip level (green=dry, amber=wet, blue=icy)
-- **Message Boards** — Amber LED / VMS-style cards grouped by roadway
-- **Cameras** — Image grids grouped by roadway, one `<details>` per roadway
+- **Message Boards** — Amber LED / VMS-style cards, one collapsible `<details>` per roadway (first open, rest closed) — same layout pattern as Cameras
+- **Cameras** — Image grids, one collapsible `<details>` per roadway (first open, rest closed)
 
 ## Extensibility pattern
 

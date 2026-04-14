@@ -320,14 +320,6 @@ details[open] > summary::before { transform: rotate(90deg); }
   border-top: 1px solid #222;
 }
 
-.vms-roadway-group { margin-bottom: 0.25rem; }
-.vms-roadway-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #555;
-  padding: 0.75rem 0.9rem 0.25rem;
-}
-
 /* --- Weather Stations --- */
 
 .wx-grid {
@@ -868,7 +860,7 @@ def render_message_board_card(board: dict) -> str:
 
 
 def render_message_boards_section(boards: list[dict]) -> str:
-    """Return HTML for all message boards, grouped by roadway."""
+    """Return HTML for all message boards, one <details> per roadway (mirrors camera layout)."""
     if not boards:
         return ""
 
@@ -876,28 +868,24 @@ def render_message_boards_section(boards: list[dict]) -> str:
     for board in boards:
         groups.setdefault(board.get("roadway") or "Unknown", []).append(board)
 
-    count = len(boards)
-    noun = "board" if count == 1 else "boards"
-
-    roadway_subsections = ""
-    for roadway in sorted(groups, key=str.lower):
-        cards_html = "".join(render_message_board_card(b) for b in groups[roadway])
-        roadway_subsections += (
-            f'<div class="vms-roadway-group">'
-            f'<div class="vms-roadway-label">{e(roadway)}</div>'
+    sections = []
+    for i, roadway in enumerate(sorted(groups, key=str.lower)):
+        roadway_boards = groups[roadway]
+        count = len(roadway_boards)
+        noun = "board" if count == 1 else "boards"
+        open_attr = " open" if i == 0 else ""
+        cards_html = "".join(render_message_board_card(b) for b in roadway_boards)
+        sections.append(
+            f"<details{open_attr}>"
+            f"<summary>"
+            f'<span class="roadway-name">{e(roadway)}</span>'
+            f'<span class="roadway-count">{count} {noun}</span>'
+            f"</summary>"
             f'<div class="vms-grid">{cards_html}</div>'
-            f"</div>"
+            f"</details>"
         )
 
-    return (
-        f"<details open>"
-        f"<summary>"
-        f'<span class="roadway-name">Message Boards</span>'
-        f'<span class="roadway-count">{count} {noun}</span>'
-        f"</summary>"
-        f"{roadway_subsections}"
-        f"</details>"
-    )
+    return "".join(sections)
 
 
 # ---------------------------------------------------------------------------
