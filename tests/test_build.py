@@ -200,17 +200,17 @@ class TestRenderViewCard:
         html = render_view_card(sample_camera, sample_view)
         assert f'src="{sample_view["url"]}"' in html
 
-    def test_contains_href(self, sample_camera, sample_view):
+    def test_opens_lightbox_on_click(self, sample_camera, sample_view):
         html = render_view_card(sample_camera, sample_view)
-        assert f'href="{sample_view["url"]}"' in html
+        assert 'openLightbox' in html
 
     def test_has_lazy_loading(self, sample_camera, sample_view):
         html = render_view_card(sample_camera, sample_view)
         assert 'loading="lazy"' in html
 
-    def test_opens_in_new_tab(self, sample_camera, sample_view):
+    def test_does_not_open_new_tab(self, sample_camera, sample_view):
         html = render_view_card(sample_camera, sample_view)
-        assert 'target="_blank"' in html
+        assert 'target="_blank"' not in html
 
     def test_contains_location(self, sample_camera, sample_view):
         html = render_view_card(sample_camera, sample_view)

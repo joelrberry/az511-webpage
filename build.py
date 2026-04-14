@@ -251,6 +251,7 @@ details[open] > summary::before { transform: rotate(90deg); }
   display: block;
   background: #c8cfd8;
   transition: opacity 0.2s;
+  cursor: zoom-in;
 }
 .camera-img:hover { opacity: 0.88; }
 
@@ -938,10 +939,9 @@ def render_view_card(cam: dict, view: dict) -> str:
     return (
         f'<div class="camera-card">'
         f'<h3 class="camera-location" title="{location}">{location}</h3>'
-        f'<a href="{url}" target="_blank" rel="noopener noreferrer">'
         f'<img class="camera-img" src="{url}" alt="{desc}" loading="lazy"'
+        f' onclick="openLightbox(this.src, this.alt)"'
         f' onerror="this.style.display=\'none\'">'
-        f"</a>"
         f'<p class="view-label">{desc}</p>'
         f"</div>"
     )
