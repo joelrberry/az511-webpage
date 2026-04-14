@@ -31,16 +31,16 @@ def load_cameras(api_key: str | None = None) -> list[dict]:
     try:
         client = AZ511Client(api_key=api_key) if api_key else AZ511Client()
         cameras = client.get_cameras()
-    except AuthError:
+    except AuthError as exc:
         raise RuntimeError(
             "Invalid API key. Check AZ511_API_KEY in your .env file. "
             "Get a free key at https://www.az511.com/my511/register"
-        )
-    except RateLimitError:
+        ) from exc
+    except RateLimitError as exc:
         raise RuntimeError(
             "AZ511 rate limit exceeded (10 requests / 60 seconds). "
             "Wait a moment and retry."
-        )
+        ) from exc
     except APIError as exc:
         raise RuntimeError(f"AZ511 API error: {exc}") from exc
 
@@ -103,16 +103,16 @@ def load_message_boards(api_key: str | None = None) -> list[dict]:
     try:
         client = AZ511Client(api_key=api_key) if api_key else AZ511Client()
         boards = client.get_message_boards()
-    except AuthError:
+    except AuthError as exc:
         raise RuntimeError(
             "Invalid API key. Check AZ511_API_KEY in your .env file. "
             "Get a free key at https://www.az511.com/my511/register"
-        )
-    except RateLimitError:
+        ) from exc
+    except RateLimitError as exc:
         raise RuntimeError(
             "AZ511 rate limit exceeded (10 requests / 60 seconds). "
             "Wait a moment and retry."
-        )
+        ) from exc
     except APIError as exc:
         raise RuntimeError(f"AZ511 API error: {exc}") from exc
 
@@ -161,16 +161,16 @@ def load_weather_stations(api_key: str | None = None) -> list[dict]:
     try:
         client = AZ511Client(api_key=api_key) if api_key else AZ511Client()
         stations = client.get_weather_stations()
-    except AuthError:
+    except AuthError as exc:
         raise RuntimeError(
             "Invalid API key. Check AZ511_API_KEY in your .env file. "
             "Get a free key at https://www.az511.com/my511/register"
-        )
-    except RateLimitError:
+        ) from exc
+    except RateLimitError as exc:
         raise RuntimeError(
             "AZ511 rate limit exceeded (10 requests / 60 seconds). "
             "Wait a moment and retry."
-        )
+        ) from exc
     except APIError as exc:
         raise RuntimeError(f"AZ511 API error: {exc}") from exc
 
@@ -217,16 +217,16 @@ def load_rest_areas(api_key: str | None = None) -> list[dict]:
     try:
         client = AZ511Client(api_key=api_key) if api_key else AZ511Client()
         areas = client.get_rest_areas()
-    except AuthError:
+    except AuthError as exc:
         raise RuntimeError(
             "Invalid API key. Check AZ511_API_KEY in your .env file. "
             "Get a free key at https://www.az511.com/my511/register"
-        )
-    except RateLimitError:
+        ) from exc
+    except RateLimitError as exc:
         raise RuntimeError(
             "AZ511 rate limit exceeded (10 requests / 60 seconds). "
             "Wait a moment and retry."
-        )
+        ) from exc
     except APIError as exc:
         raise RuntimeError(f"AZ511 API error: {exc}") from exc
 
