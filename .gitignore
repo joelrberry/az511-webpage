@@ -6,4 +6,7 @@ __pycache__/
 *.pyo
 .pytest_cache/
 cameras.json
+message_boards.json
+weather_stations.json
+az511.html
 cameras.html

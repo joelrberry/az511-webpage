@@ -8,13 +8,20 @@ from unittest.mock import patch
 import pytest
 
 from build import (
+    _grip_class,
     build,
     e,
     group_by_roadway,
-    load_data,
+    load_cameras_data,
+    load_message_boards_data,
+    load_weather_stations_data,
+    render_message_board_card,
+    render_message_boards_section,
     render_page,
     render_roadway_section,
     render_view_card,
+    render_weather_card,
+    render_weather_section,
 )
 
 
@@ -75,6 +82,40 @@ def sample_roadways(sample_cameras):
     return group_by_roadway(sample_cameras)
 
 
+@pytest.fixture
+def sample_station():
+    return {
+        "id": 42,
+        "latitude": 33.4,
+        "longitude": -112.1,
+        "air_temperature": 22.0,
+        "surface_temperature": 20.0,
+        "wind_speed": 10.0,
+        "wind_direction": "NE",
+        "relative_humidity": 45.0,
+        "level_of_grip": "DRY",
+        "max_wind_speed": 18.0,
+        "last_updated": "2024-06-15T12:00:00+00:00",
+    }
+
+
+@pytest.fixture
+def sample_station_no_data():
+    return {
+        "id": 99,
+        "latitude": 33.6,
+        "longitude": -111.9,
+        "air_temperature": None,
+        "surface_temperature": None,
+        "wind_speed": None,
+        "wind_direction": None,
+        "relative_humidity": None,
+        "level_of_grip": None,
+        "max_wind_speed": None,
+        "last_updated": None,
+    }
+
+
 # ---------------------------------------------------------------------------
 # e() — HTML escaping helper
 # ---------------------------------------------------------------------------
@@ -100,17 +141,17 @@ class TestEscapeHelper:
 # load_data
 # ---------------------------------------------------------------------------
 
-class TestLoadData:
+class TestLoadCamerasData:
     def test_loads_valid_json(self, tmp_path, sample_cameras):
         p = tmp_path / "cameras.json"
         p.write_text(json.dumps(sample_cameras), encoding="utf-8")
-        result = load_data(str(p))
+        result = load_cameras_data(str(p))
         assert result == sample_cameras
 
     def test_raises_file_not_found_for_missing_file(self, tmp_path):
         missing = str(tmp_path / "nonexistent.json")
         with pytest.raises(FileNotFoundError, match="fetch.py"):
-            load_data(missing)
+            load_cameras_data(missing)
 
 
 # ---------------------------------------------------------------------------
@@ -251,18 +292,70 @@ class TestRenderPage:
         html = render_page(sample_roadways, total=3)
         assert "<main>" in html
 
-    def test_total_camera_count_in_page(self, sample_roadways):
-        html = render_page(sample_roadways, total=3)
-        assert "3" in html
-
-    def test_roadway_count_in_page(self, sample_roadways):
-        html = render_page(sample_roadways, total=3)
-        assert "2" in html  # 2 roadways (I-10, SR-101)
-
     def test_all_roadways_present(self, sample_roadways):
         html = render_page(sample_roadways, total=3)
         assert "I-10" in html
         assert "SR-101" in html
+
+    def test_contains_map_div(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert 'id="map"' in html
+
+    def test_contains_leaflet_css(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert "leaflet" in html.lower()
+
+    def test_camera_coordinates_in_map_script(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        # Coordinates from sample cameras should appear in embedded JSON
+        assert "33.4" in html or "33.5" in html
+
+    def test_contains_lightbox_div(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert 'id="lightbox"' in html
+        assert 'id="lightbox-img"' in html
+
+    def test_contains_lightbox_js(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert 'openLightbox' in html
+        assert 'closeLightbox' in html
+
+    # --- Tab layout ---
+
+    def test_contains_tab_bar(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert 'class="tab-bar"' in html
+
+    def test_all_four_tab_buttons_present(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert 'id="tab-btn-map"' in html
+        assert 'id="tab-btn-weather"' in html
+        assert 'id="tab-btn-boards"' in html
+        assert 'id="tab-btn-cameras"' in html
+
+    def test_all_four_tab_panels_present(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert 'id="tab-map"' in html
+        assert 'id="tab-weather"' in html
+        assert 'id="tab-boards"' in html
+        assert 'id="tab-cameras"' in html
+
+    def test_tab_js_show_tab_function_present(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert "showTab" in html
+
+    def test_no_map_section_details_wrapper(self, sample_roadways):
+        """Map is now a plain tab panel, not wrapped in <details id='map-section'>."""
+        html = render_page(sample_roadways, total=3)
+        assert 'id="map-section"' not in html
+
+    def test_weather_stations_rendered_when_provided(self, sample_roadways, sample_station):
+        html = render_page(sample_roadways, total=3, stations=[sample_station])
+        assert "Station #42" in html
+
+    def test_weather_tab_empty_message_when_no_stations(self, sample_roadways):
+        html = render_page(sample_roadways, total=3, stations=[])
+        assert "No weather station data" in html
 
 
 # ---------------------------------------------------------------------------
@@ -272,10 +365,10 @@ class TestRenderPage:
 class TestBuild:
     def test_writes_html_file(self, tmp_path, sample_cameras):
         input_file = tmp_path / "cameras.json"
-        output_file = tmp_path / "cameras.html"
+        output_file = tmp_path / "az511.html"
         input_file.write_text(json.dumps(sample_cameras), encoding="utf-8")
 
-        build(input_path=str(input_file), output_path=str(output_file))
+        build(cameras_path=str(input_file), output_path=str(output_file))
 
         assert output_file.exists()
         content = output_file.read_text(encoding="utf-8")
@@ -283,10 +376,10 @@ class TestBuild:
 
     def test_output_contains_camera_data(self, tmp_path, sample_cameras):
         input_file = tmp_path / "cameras.json"
-        output_file = tmp_path / "cameras.html"
+        output_file = tmp_path / "az511.html"
         input_file.write_text(json.dumps(sample_cameras), encoding="utf-8")
 
-        build(input_path=str(input_file), output_path=str(output_file))
+        build(cameras_path=str(input_file), output_path=str(output_file))
 
         content = output_file.read_text(encoding="utf-8")
         assert "I-10" in content
@@ -296,4 +389,270 @@ class TestBuild:
         missing = str(tmp_path / "nonexistent.json")
         output = str(tmp_path / "out.html")
         with pytest.raises(FileNotFoundError):
-            build(input_path=missing, output_path=output)
+            build(cameras_path=missing, output_path=output)
+
+    def test_weather_path_param_accepted(self, tmp_path, sample_cameras):
+        cameras_file = tmp_path / "cameras.json"
+        weather_file = tmp_path / "wx.json"
+        output_file = tmp_path / "az511.html"
+        cameras_file.write_text(json.dumps(sample_cameras), encoding="utf-8")
+        # weather file missing — build should still succeed (optional)
+        build(
+            cameras_path=str(cameras_file),
+            weather_path=str(weather_file),
+            output_path=str(output_file),
+        )
+        assert output_file.exists()
+
+
+# ---------------------------------------------------------------------------
+# load_message_boards_data
+# ---------------------------------------------------------------------------
+
+class TestLoadMessageBoardsData:
+    def test_loads_valid_json(self, tmp_path):
+        boards = [{"id": "mb1", "name": "I-10 EB", "roadway": "I-10",
+                   "direction_of_travel": "Eastbound", "messages": ["SLOW"],
+                   "latitude": 33.4, "longitude": -112.1, "last_updated": None}]
+        p = tmp_path / "message_boards.json"
+        p.write_text(json.dumps(boards), encoding="utf-8")
+        result = load_message_boards_data(str(p))
+        assert result == boards
+
+    def test_returns_empty_list_for_missing_file(self, tmp_path):
+        missing = str(tmp_path / "nonexistent.json")
+        result = load_message_boards_data(missing)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# load_weather_stations_data
+# ---------------------------------------------------------------------------
+
+class TestLoadWeatherStationsData:
+    def test_loads_valid_json(self, tmp_path, sample_station):
+        p = tmp_path / "weather_stations.json"
+        p.write_text(json.dumps([sample_station]), encoding="utf-8")
+        result = load_weather_stations_data(str(p))
+        assert result == [sample_station]
+
+    def test_returns_empty_list_for_missing_file(self, tmp_path):
+        missing = str(tmp_path / "nonexistent.json")
+        result = load_weather_stations_data(missing)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for message board tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def sample_board():
+    return {
+        "id": "mb1",
+        "name": "I-10 EB @ 43rd Ave",
+        "roadway": "I-10",
+        "direction_of_travel": "Eastbound",
+        "messages": ["CONSTRUCTION AHEAD", "EXPECT DELAYS"],
+        "latitude": 33.4,
+        "longitude": -112.1,
+        "last_updated": "2024-06-15T12:00:00+00:00",
+    }
+
+
+@pytest.fixture
+def sample_board_empty_messages():
+    return {
+        "id": "mb2",
+        "name": "SR-101 NB",
+        "roadway": "SR-101",
+        "direction_of_travel": "Northbound",
+        "messages": [],
+        "latitude": 33.6,
+        "longitude": -111.9,
+        "last_updated": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# render_message_board_card
+# ---------------------------------------------------------------------------
+
+class TestRenderMessageBoardCard:
+    def test_contains_roadway(self, sample_board):
+        html = render_message_board_card(sample_board)
+        assert "I-10" in html
+
+    def test_contains_direction(self, sample_board):
+        html = render_message_board_card(sample_board)
+        assert "Eastbound" in html
+
+    def test_message_lines_rendered(self, sample_board):
+        html = render_message_board_card(sample_board)
+        assert "CONSTRUCTION AHEAD" in html
+        assert "EXPECT DELAYS" in html
+
+    def test_vms_line_class_on_messages(self, sample_board):
+        html = render_message_board_card(sample_board)
+        assert 'class="vms-line"' in html
+
+    def test_blank_class_when_no_messages(self, sample_board_empty_messages):
+        html = render_message_board_card(sample_board_empty_messages)
+        assert 'class="vms-line blank"' in html
+
+    def test_updated_timestamp_shown(self, sample_board):
+        html = render_message_board_card(sample_board)
+        assert "2024-06-15" in html
+
+    def test_no_updated_line_when_none(self, sample_board_empty_messages):
+        html = render_message_board_card(sample_board_empty_messages)
+        assert "Updated:" not in html
+
+    def test_escapes_special_chars_in_messages(self, sample_board):
+        board = {**sample_board, "messages": ['<b>GO SLOW & "MERGE"</b>']}
+        html = render_message_board_card(board)
+        assert "<b>" not in html
+        assert "&lt;b&gt;" in html
+        assert "&amp;" in html
+        assert "&quot;" in html
+
+
+# ---------------------------------------------------------------------------
+# render_message_boards_section
+# ---------------------------------------------------------------------------
+
+class TestRenderMessageBoardsSection:
+    def test_empty_boards_returns_empty_string(self):
+        assert render_message_boards_section([]) == ""
+
+    def test_contains_message_boards_label(self, sample_board):
+        html = render_message_boards_section([sample_board])
+        assert "Message Boards" in html
+
+    def test_count_in_summary(self, sample_board):
+        html = render_message_boards_section([sample_board])
+        assert "1 board" in html
+
+    def test_plural_noun_for_multiple_boards(self, sample_board, sample_board_empty_messages):
+        html = render_message_boards_section([sample_board, sample_board_empty_messages])
+        assert "2 boards" in html
+
+    def test_details_open_by_default(self, sample_board):
+        html = render_message_boards_section([sample_board])
+        assert "<details open>" in html
+
+    def test_roadway_label_present(self, sample_board):
+        html = render_message_boards_section([sample_board])
+        assert "I-10" in html
+
+    def test_board_card_included(self, sample_board):
+        html = render_message_boards_section([sample_board])
+        assert "CONSTRUCTION AHEAD" in html
+
+
+# ---------------------------------------------------------------------------
+# _grip_class
+# ---------------------------------------------------------------------------
+
+class TestGripClass:
+    def test_dry_variants(self):
+        assert _grip_class("DRY") == "grip-dry"
+        assert _grip_class("BARE_AND_DRY") == "grip-dry"
+        assert _grip_class("GOOD") == "grip-dry"
+
+    def test_wet_variants(self):
+        assert _grip_class("WET") == "grip-wet"
+        assert _grip_class("DAMP") == "grip-wet"
+        assert _grip_class("TRACE_MOISTURE") == "grip-wet"
+
+    def test_icy_variants(self):
+        assert _grip_class("ICY") == "grip-icy"
+        assert _grip_class("FROST") == "grip-icy"
+        assert _grip_class("SNOW") == "grip-icy"
+        assert _grip_class("SLIPPERY") == "grip-icy"
+
+    def test_none_returns_empty(self):
+        assert _grip_class(None) == ""
+
+    def test_unknown_returns_empty(self):
+        assert _grip_class("UNKNOWN_VALUE") == ""
+
+    def test_case_insensitive(self):
+        assert _grip_class("dry") == "grip-dry"
+        assert _grip_class("wet") == "grip-wet"
+        assert _grip_class("icy") == "grip-icy"
+
+
+# ---------------------------------------------------------------------------
+# render_weather_card
+# ---------------------------------------------------------------------------
+
+class TestRenderWeatherCard:
+    def test_contains_station_id(self, sample_station):
+        html = render_weather_card(sample_station)
+        assert "Station #42" in html
+
+    def test_contains_grip_badge(self, sample_station):
+        html = render_weather_card(sample_station)
+        assert "grip-badge" in html
+
+    def test_grip_dry_class_applied(self, sample_station):
+        html = render_weather_card(sample_station)
+        assert "grip-dry" in html
+
+    def test_grip_wet_class_applied(self, sample_station):
+        station = {**sample_station, "level_of_grip": "WET"}
+        html = render_weather_card(station)
+        assert "grip-wet" in html
+
+    def test_grip_icy_class_applied(self, sample_station):
+        station = {**sample_station, "level_of_grip": "ICY"}
+        html = render_weather_card(station)
+        assert "grip-icy" in html
+
+    def test_temperature_displayed_as_fahrenheit(self, sample_station):
+        # 22°C → ~71.6°F → rounded to 72
+        html = render_weather_card(sample_station)
+        assert "72" in html
+
+    def test_no_crash_on_all_none_fields(self, sample_station_no_data):
+        html = render_weather_card(sample_station_no_data)
+        assert "Station #99" in html
+
+    def test_updated_timestamp_shown(self, sample_station):
+        html = render_weather_card(sample_station)
+        assert "2024-06-15" in html
+
+    def test_no_updated_when_none(self, sample_station_no_data):
+        html = render_weather_card(sample_station_no_data)
+        assert "UTC" not in html
+
+    def test_grip_label_in_html(self, sample_station):
+        html = render_weather_card(sample_station)
+        assert "DRY" in html
+
+    def test_unknown_grip_label_when_none(self, sample_station_no_data):
+        html = render_weather_card(sample_station_no_data)
+        assert "Unknown" in html
+
+
+# ---------------------------------------------------------------------------
+# render_weather_section
+# ---------------------------------------------------------------------------
+
+class TestRenderWeatherSection:
+    def test_empty_returns_empty_string(self):
+        assert render_weather_section([]) == ""
+
+    def test_grid_class_present(self, sample_station):
+        html = render_weather_section([sample_station])
+        assert "wx-grid" in html
+
+    def test_station_card_included(self, sample_station):
+        html = render_weather_section([sample_station])
+        assert "Station #42" in html
+
+    def test_multiple_stations_all_rendered(self, sample_station, sample_station_no_data):
+        html = render_weather_section([sample_station, sample_station_no_data])
+        assert "Station #42" in html
+        assert "Station #99" in html
