@@ -9,8 +9,9 @@ A static single-file web app that pulls live Arizona 511 traffic data — camera
 - **Traffic cameras** — Live snapshots grouped by roadway, with a click-to-expand lightbox
 - **Message boards** — Freeway VMS signs rendered as amber LED displays
 - **Weather stations** — Road condition cards color-coded by surface grip level (dry / wet / icy)
-- **Interactive map** — Leaflet.js map with color-coded pins for all three data types; camera images load inline in map popups
-- **4-tab layout** — Map, Weather, Message Boards, and Cameras tabs with URL hash navigation (`#map`, `#weather`, `#boards`, `#cameras`)
+- **Rest areas** — Cards showing open/closed status, amenities (restroom, ramada, visitor center, travel info, vending), and truck space availability
+- **Interactive map** — Leaflet.js map with color-coded pins for all four data types; camera images load inline in map popups; per-layer toggle buttons to show/hide each type
+- **5-tab layout** — Map, Weather, Message Boards, Cameras, and Rest Areas tabs with URL hash navigation (`#map`, `#weather`, `#boards`, `#cameras`, `#restareas`)
 - **Zero runtime dependencies** — The output is one `.html` file; Leaflet loads from CDN
 
 ---
@@ -42,7 +43,7 @@ cp .env.example .env
 ### 4. Run
 
 ```bash
-python fetch.py   # Fetches data → cameras.json, message_boards.json, weather_stations.json
+python fetch.py   # Fetches data → cameras.json, message_boards.json, weather_stations.json, rest_areas.json
 python build.py   # Builds → az511.html
 open az511.html   # macOS; or just double-click the file
 ```
@@ -57,9 +58,10 @@ The project is a two-phase pipeline:
 fetch.py ──► cameras.json
          ──► message_boards.json       ──► build.py ──► az511.html
          ──► weather_stations.json
+         ──► rest_areas.json
 ```
 
-**`fetch.py`** calls the AZ511 REST API (via the [`az511`](https://pypi.org/project/az511-client/) Python client), filters and normalises the responses, and writes three JSON files. Running fetch again refreshes the data.
+**`fetch.py`** calls the AZ511 REST API (via the [`az511`](https://pypi.org/project/az511-client/) Python client), filters and normalises the responses, and writes four JSON files. Running fetch again refreshes the data.
 
 **`build.py`** reads those JSON files and generates a single self-contained HTML file. All CSS, JavaScript, and data are inlined — no assets directory, no network requests beyond the Leaflet CDN and live camera image URLs.
 
@@ -88,6 +90,7 @@ Generated files (`.gitignore`d):
 | `cameras.json` | Fetched camera data |
 | `message_boards.json` | Fetched VMS board data |
 | `weather_stations.json` | Fetched weather station data |
+| `rest_areas.json` | Fetched rest area data |
 | `az511.html` | Final output — open this in a browser |
 
 ---
@@ -98,7 +101,7 @@ Generated files (`.gitignore`d):
 pytest
 ```
 
-142 tests covering serialization, filtering, sorting, HTML rendering, escaping, and the end-to-end build. No real API calls are made — the AZ511 client is mocked throughout.
+195 tests covering serialization, filtering, sorting, HTML rendering, escaping, and the end-to-end build. No real API calls are made — the AZ511 client is mocked throughout.
 
 ---
 
@@ -138,14 +141,14 @@ def render_<type>_section(items: list[dict]) -> str:
     ...
 ```
 
-See the existing camera, message board, and weather station implementations for reference.
+See the existing camera, message board, weather station, and rest area implementations for reference.
 
 ---
 
 ## AZ511 API Notes
 
 - **Free key** — register at [az511.com/my511/register](https://www.az511.com/my511/register)
-- **Rate limit** — 10 requests per 60 seconds; `fetch.py` uses 3 (cameras, message boards, weather stations)
+- **Rate limit** — 10 requests per 60 seconds; `fetch.py` uses 4 (cameras, message boards, weather stations, rest areas)
 - **Data freshness** — AZ511 updates camera snapshots every 1–2 minutes; re-run `fetch.py` + `build.py` to get fresh data
 
 ---
@@ -154,6 +157,10 @@ See the existing camera, message board, and weather station implementations for 
 
 **Leaflet / f-string conflict** — `_MAP_JS_TEMPLATE` and `_TAB_JS` in `build.py` are plain Python strings, not f-strings. Leaflet's tile URL template uses `{s}`, `{z}`, `{x}`, `{y}` which Python would try to evaluate as f-string placeholders. Data is injected via `.replace("%%PLACEHOLDER%%", value)` and the JS is concatenated outside any f-string context.
 
-**Temperature units** — The AZ511 API returns temperatures in Celsius. Both `render_weather_card()` in `build.py` and the map popup JS convert to Fahrenheit for display.
+**Temperature units** — The AZ511 API returns temperatures in Fahrenheit already. Values are rounded and displayed with a `°F` suffix directly — no conversion needed.
 
 **Map resize on tab switch** — Leaflet can't calculate tile layout while a panel is hidden (CSS `display: none`). The map is exposed as `window._az511Map` so the tab switcher can call `invalidateSize()` with a short delay when the Map tab becomes active.
+
+**Map layer toggle** — Each data type has its own `L.layerGroup()`. A custom Leaflet control in the top-right corner renders one toggle button per type; clicking hides or shows that layer without affecting the others.
+
+**Rest area status colors** — `_status_class()` in `build.py` and `makeRestAreaSvg()` in the map JS both map status strings to colors: "Open" → green (`#38A169`), "Closed" → red (`#E53E3E`), unknown → gray (`#718096`).
