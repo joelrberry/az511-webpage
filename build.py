@@ -450,6 +450,66 @@ details[open] > summary::before { transform: rotate(90deg); }
 }
 #lightbox-close:hover { opacity: 1; }
 
+/* --- Map legend --- */
+.map-legend {
+  background: rgba(255,255,255,0.96);
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.2);
+  padding: 0.55rem 0.65rem 0.45rem;
+  min-width: 170px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.legend-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #888;
+  margin-bottom: 0.35rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid #eee;
+}
+
+.legend-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0.3rem 0.35rem;
+  font-size: 0.8rem;
+  color: #222;
+  text-align: left;
+  transition: background 0.12s, opacity 0.12s;
+  line-height: 1.3;
+}
+.legend-btn:hover { background: #f3f4f6; }
+.legend-btn.active { opacity: 1; }
+.legend-btn:not(.active) { opacity: 0.38; }
+
+.legend-swatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+
+.legend-label { flex: 1; }
+
+.legend-count {
+  font-size: 0.68rem;
+  color: #888;
+  background: #eef0f3;
+  border-radius: 10px;
+  padding: 0.05rem 0.4rem;
+  flex-shrink: 0;
+}
+
 /* --- Map popup overrides --- */
 .map-popup strong {
   display: block;
@@ -626,6 +686,11 @@ _MAP_JS_TEMPLATE = """\
     });
   }
 
+  // --- Layer groups (one per data type for legend toggling) ---
+  var cameraLayer  = L.layerGroup();
+  var boardLayer   = L.layerGroup();
+  var weatherLayer = L.layerGroup();
+
   CAMERAS.forEach(function (cam) {
     if (cam.latitude == null || cam.longitude == null) return;
     var imgs = cam.views.map(function (v) {
@@ -636,7 +701,7 @@ _MAP_JS_TEMPLATE = """\
     }).join('');
     var popup = '<div class="map-popup"><strong>' + esc(cam.location) + '</strong>' + imgs + '</div>';
     L.marker([cam.latitude, cam.longitude], { icon: makeIcon(CAM_SVG) })
-      .bindPopup(popup, { maxWidth: 300 }).addTo(map);
+      .bindPopup(popup, { maxWidth: 300 }).addTo(cameraLayer);
   });
 
   BOARDS.forEach(function (board) {
@@ -652,7 +717,7 @@ _MAP_JS_TEMPLATE = """\
       + '<div class="vms-display" style="margin-top:6px;border-radius:4px">' + lines + '</div>'
       + '</div>';
     L.marker([board.latitude, board.longitude], { icon: makeIcon(VMS_SVG) })
-      .bindPopup(popup, { maxWidth: 300 }).addTo(map);
+      .bindPopup(popup, { maxWidth: 300 }).addTo(boardLayer);
   });
 
   WEATHER.forEach(function (st) {
@@ -672,8 +737,51 @@ _MAP_JS_TEMPLATE = """\
       + 'Grip: <strong>' + esc(grip) + '</strong>'
       + '</div></div>';
     L.marker([st.latitude, st.longitude], { icon: makeIcon(makeWeatherSvg(st.level_of_grip)) })
-      .bindPopup(popup, { maxWidth: 240 }).addTo(map);
+      .bindPopup(popup, { maxWidth: 240 }).addTo(weatherLayer);
   });
+
+  // Add all layers to map (all visible by default)
+  cameraLayer.addTo(map);
+  boardLayer.addTo(map);
+  weatherLayer.addTo(map);
+
+  // --- Legend control ---
+  var legendControl = L.control({ position: 'topright' });
+  legendControl.onAdd = function () {
+    var div = L.DomUtil.create('div', 'map-legend');
+    L.DomEvent.disableClickPropagation(div);
+
+    var title = L.DomUtil.create('div', 'legend-title', div);
+    title.textContent = 'Layers';
+
+    function addToggle(color, label, count, layer) {
+      if (count === 0) return;
+      var btn = L.DomUtil.create('button', 'legend-btn active', div);
+      btn.innerHTML = '<span class="legend-swatch" style="background:' + color + '"></span>'
+        + '<span class="legend-label">' + label + '</span>'
+        + '<span class="legend-count">' + count + '</span>';
+      L.DomEvent.on(btn, 'click', function () {
+        if (map.hasLayer(layer)) {
+          map.removeLayer(layer);
+          L.DomUtil.removeClass(btn, 'active');
+        } else {
+          map.addLayer(layer);
+          L.DomUtil.addClass(btn, 'active');
+        }
+      });
+    }
+
+    var camCount = CAMERAS.filter(function (c) { return c.latitude != null && c.longitude != null; }).length;
+    var brdCount = BOARDS.filter(function (b) { return b.latitude != null && b.longitude != null; }).length;
+    var wxCount  = WEATHER.filter(function (w) { return w.latitude != null && w.longitude != null; }).length;
+
+    addToggle('#3182CE', 'Cameras',        camCount, cameraLayer);
+    addToggle('#D97706', 'Message Boards', brdCount, boardLayer);
+    addToggle('#718096', 'Weather',        wxCount,  weatherLayer);
+
+    return div;
+  };
+  legendControl.addTo(map);
 }());
 </script>"""
 

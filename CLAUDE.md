@@ -88,6 +88,10 @@ Free key at https://www.az511.com/my511/register — stored in `.env` as `AZ511_
 
 `window._az511Map` is set in the map JS so the tab switcher can call `map.invalidateSize()` when switching to the Map tab — necessary because Leaflet can't compute tile layout while the panel is hidden.
 
+## Map legend / layer toggling
+
+Each marker type (cameras, message boards, weather stations) is added to its own `L.layerGroup()` (`cameraLayer`, `boardLayer`, `weatherLayer`). A Leaflet custom control (`legendControl`, positioned `topright`) renders toggle buttons — one per type. Clicking a button calls `map.addLayer()` / `map.removeLayer()` and toggles an `active` CSS class that dims the button when the layer is hidden. The control is only shown for types that have at least one mapped marker.
+
 ## Weather station ↔ camera correlation
 
 Weather stations are correlated to cameras via a shared ADOT UUID:

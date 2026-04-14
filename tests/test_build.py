@@ -361,6 +361,17 @@ class TestRenderPage:
         html = render_page(sample_roadways, total=3, stations=[])
         assert "No weather station data" in html
 
+    def test_legend_control_present(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert "map-legend" in html
+        assert "legendControl" in html
+
+    def test_legend_layer_groups_present(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert "cameraLayer" in html
+        assert "boardLayer" in html
+        assert "weatherLayer" in html
+
 
 # ---------------------------------------------------------------------------
 # build (end-to-end, no real cameras.json)
