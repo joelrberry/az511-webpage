@@ -206,6 +206,60 @@ def save_weather_stations(stations: list[dict], path: str = "weather_stations.js
 
 
 # ---------------------------------------------------------------------------
+# Rest Areas
+# ---------------------------------------------------------------------------
+
+def load_rest_areas(api_key: str | None = None) -> list[dict]:
+    """Instantiate AZ511Client, call get_rest_areas(), return list of serialized dicts.
+
+    Raises RuntimeError on auth failure, rate limiting, or other API errors.
+    """
+    try:
+        client = AZ511Client(api_key=api_key) if api_key else AZ511Client()
+        areas = client.get_rest_areas()
+    except AuthError:
+        raise RuntimeError(
+            "Invalid API key. Check AZ511_API_KEY in your .env file. "
+            "Get a free key at https://www.az511.com/my511/register"
+        )
+    except RateLimitError:
+        raise RuntimeError(
+            "AZ511 rate limit exceeded (10 requests / 60 seconds). "
+            "Wait a moment and retry."
+        )
+    except APIError as exc:
+        raise RuntimeError(f"AZ511 API error: {exc}") from exc
+
+    return [serialize_rest_area(area) for area in areas]
+
+
+def serialize_rest_area(area) -> dict:
+    """Convert a RestArea model instance to a plain dict."""
+    return {
+        "id": area.id,
+        "name": area.name,
+        "status": area.status,
+        "location": area.location,
+        "city": area.city,
+        "latitude": area.latitude,
+        "longitude": area.longitude,
+        "restroom": area.restroom,
+        "ramada": area.ramada,
+        "visitor_center": area.visitor_center,
+        "travel_information": area.travel_information,
+        "vending_machine": area.vending_machine,
+        "total_truck_spaces": area.total_truck_spaces,
+        "available_truck_spaces": area.available_truck_spaces,
+    }
+
+
+def save_rest_areas(areas: list[dict], path: str = "rest_areas.json") -> None:
+    """Write the rest area list to a JSON file."""
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(areas, fh, indent=2)
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -226,6 +280,10 @@ def main() -> None:
     stations = load_weather_stations()
     save_weather_stations(stations)
     print(f"Saved {len(stations)} weather stations to weather_stations.json")
+
+    areas = load_rest_areas()
+    save_rest_areas(areas)
+    print(f"Saved {len(areas)} rest areas to rest_areas.json")
 
 
 if __name__ == "__main__":

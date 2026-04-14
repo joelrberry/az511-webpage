@@ -66,6 +66,17 @@ def load_weather_stations_data(path: str = "weather_stations.json") -> list[dict
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+def load_rest_areas_data(path: str = "rest_areas.json") -> list[dict]:
+    """Load rest areas from JSON file.
+
+    Returns an empty list if the file is missing — rest areas are optional.
+    """
+    p = Path(path)
+    if not p.exists():
+        return []
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 def group_by_roadway(cameras: list[dict]) -> OrderedDict:
     """Group cameras by roadway, sorted alphabetically (case-insensitive)."""
     groups: dict[str, list[dict]] = {}
@@ -91,6 +102,18 @@ def _grip_class(level: str | None) -> str:
         return "grip-wet"
     if any(k in u for k in ("ICY", "ICE", "FROST", "SNOW", "SLIP")):
         return "grip-icy"
+    return ""
+
+
+def _status_class(status: str | None) -> str:
+    """Map a rest area status string to a CSS class for color coding."""
+    if not status:
+        return ""
+    u = status.upper()
+    if "OPEN" in u:
+        return "status-open"
+    if "CLOSE" in u:
+        return "status-closed"
     return ""
 
 
@@ -406,6 +429,83 @@ details[open] > summary::before { transform: rotate(90deg); }
   border-top: 1px solid #eee;
 }
 
+/* --- Rest Areas --- */
+
+.ra-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.ra-card {
+  background: #fff;
+  border-radius: 10px;
+  border-top: 4px solid #718096;
+  box-shadow: 0 1px 4px rgba(0,0,0,.1);
+  overflow: hidden;
+}
+.ra-card.status-open   { border-top-color: #38A169; }
+.ra-card.status-closed { border-top-color: #E53E3E; }
+
+.ra-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0.6rem 0.8rem 0.3rem;
+  gap: 0.5rem;
+}
+
+.ra-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  flex: 1;
+  line-height: 1.3;
+}
+
+.ra-status-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  background: #718096;
+  color: #fff;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.ra-status-badge.status-open   { background: #38A169; }
+.ra-status-badge.status-closed { background: #E53E3E; }
+
+.ra-location {
+  font-size: 0.75rem;
+  color: #555;
+  padding: 0 0.8rem 0.4rem;
+}
+
+.ra-amenities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.4rem;
+  padding: 0.2rem 0.8rem 0.5rem;
+}
+
+.ra-amenity {
+  font-size: 0.7rem;
+  color: #444;
+  background: #eef4ff;
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+}
+
+.ra-trucks {
+  font-size: 0.75rem;
+  color: #555;
+  padding: 0.2rem 0.8rem 0.5rem;
+  border-top: 1px solid #eee;
+}
+
 /* --- Lightbox --- */
 #lightbox {
   display: none;
@@ -556,7 +656,7 @@ _TAB_JS = """\
 (function () {
   'use strict';
 
-  var TABS = ['map', 'weather', 'boards', 'cameras'];
+  var TABS = ['map', 'weather', 'boards', 'cameras', 'restareas'];
 
   function showTab(name) {
     if (TABS.indexOf(name) === -1) name = 'map';
@@ -620,9 +720,10 @@ _MAP_JS_TEMPLATE = """\
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  var CAMERAS = %%CAMERAS%%;
-  var BOARDS  = %%BOARDS%%;
-  var WEATHER = %%WEATHER%%;
+  var CAMERAS    = %%CAMERAS%%;
+  var BOARDS     = %%BOARDS%%;
+  var WEATHER    = %%WEATHER%%;
+  var REST_AREAS = %%REST_AREAS%%;
 
   var map = L.map('map').setView([34.0, -111.5], 7);
   window._az511Map = map;
@@ -671,6 +772,21 @@ _MAP_JS_TEMPLATE = """\
       + '</svg>';
   }
 
+  function makeRestAreaSvg(status) {
+    var fill = '#718096';
+    if (status) {
+      var u = status.toUpperCase();
+      if (u.indexOf('OPEN') !== -1)  fill = '#38A169';
+      else if (u.indexOf('CLOSE') !== -1) fill = '#E53E3E';
+    }
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 42" width="30" height="42">'
+      + '<path d="M15 0C6.7 0 0 6.7 0 15c0 10 15 27 15 27S30 25 30 15C30 6.7 23.3 0 15 0z"'
+      + ' fill="' + fill + '" stroke="#2d3748" stroke-width="1.5"/>'
+      + '<text x="15" y="20" text-anchor="middle" fill="white"'
+      + ' font-size="12" font-family="sans-serif" font-weight="bold">R</text>'
+      + '</svg>';
+  }
+
   function makeIcon(svg) {
     return L.divIcon({
       html: svg, className: '',
@@ -679,9 +795,10 @@ _MAP_JS_TEMPLATE = """\
   }
 
   // --- Layer groups (one per data type for legend toggling) ---
-  var cameraLayer  = L.layerGroup();
-  var boardLayer   = L.layerGroup();
-  var weatherLayer = L.layerGroup();
+  var cameraLayer    = L.layerGroup();
+  var boardLayer     = L.layerGroup();
+  var weatherLayer   = L.layerGroup();
+  var restAreaLayer  = L.layerGroup();
 
   CAMERAS.forEach(function (cam) {
     if (cam.latitude == null || cam.longitude == null) return;
@@ -732,10 +849,39 @@ _MAP_JS_TEMPLATE = """\
       .bindPopup(popup, { maxWidth: 240 }).addTo(weatherLayer);
   });
 
+  REST_AREAS.forEach(function (ra) {
+    if (ra.latitude == null || ra.longitude == null) return;
+    var amenities = [];
+    if (ra.restroom)           amenities.push('Restroom');
+    if (ra.ramada)             amenities.push('Ramada');
+    if (ra.visitor_center)     amenities.push('Visitor Center');
+    if (ra.travel_information) amenities.push('Travel Info');
+    if (ra.vending_machine)    amenities.push('Vending');
+    var locParts = [ra.city, ra.location].filter(Boolean);
+    var locLine = locParts.length
+      ? '<div style="font-size:0.75rem;color:#555;margin-bottom:4px">' + esc(locParts.join(' \u2014 ')) + '</div>'
+      : '';
+    var amenLine = amenities.length
+      ? '<div style="font-size:0.75rem;color:#555;margin-bottom:2px">' + esc(amenities.join(', ')) + '</div>'
+      : '';
+    var truckLine = (ra.total_truck_spaces != null)
+      ? '<div style="font-size:0.75rem;color:#555">Trucks: '
+          + (ra.available_truck_spaces != null ? ra.available_truck_spaces : '?')
+          + '\u2009/\u2009' + ra.total_truck_spaces + ' spaces</div>'
+      : '';
+    var popup = '<div class="map-popup">'
+      + '<strong>' + esc(ra.name) + '</strong>'
+      + locLine + amenLine + truckLine
+      + '</div>';
+    L.marker([ra.latitude, ra.longitude], { icon: makeIcon(makeRestAreaSvg(ra.status)) })
+      .bindPopup(popup, { maxWidth: 260 }).addTo(restAreaLayer);
+  });
+
   // Add all layers to map (all visible by default)
   cameraLayer.addTo(map);
   boardLayer.addTo(map);
   weatherLayer.addTo(map);
+  restAreaLayer.addTo(map);
 
   // --- Legend control ---
   var legendControl = L.control({ position: 'topright' });
@@ -766,10 +912,12 @@ _MAP_JS_TEMPLATE = """\
     var camCount = CAMERAS.filter(function (c) { return c.latitude != null && c.longitude != null; }).length;
     var brdCount = BOARDS.filter(function (b) { return b.latitude != null && b.longitude != null; }).length;
     var wxCount  = WEATHER.filter(function (w) { return w.latitude != null && w.longitude != null; }).length;
+    var raCount  = REST_AREAS.filter(function (r) { return r.latitude != null && r.longitude != null; }).length;
 
     addToggle('#3182CE', 'Cameras',        camCount, cameraLayer);
     addToggle('#D97706', 'Message Boards', brdCount, boardLayer);
     addToggle('#718096', 'Weather',        wxCount,  weatherLayer);
+    addToggle('#38A169', 'Rest Areas',     raCount,  restAreaLayer);
 
     return div;
   };
@@ -979,6 +1127,75 @@ def render_weather_section(stations: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Rest area renderers
+# ---------------------------------------------------------------------------
+
+def render_rest_area_card(area: dict) -> str:
+    """Return HTML for one rest area card."""
+    name = e(area.get("name") or "")
+    status = area.get("status") or ""
+    cls = _status_class(status)
+    badge_cls = f"ra-status-badge {cls}" if cls else "ra-status-badge"
+    card_cls = f"ra-card {cls}" if cls else "ra-card"
+    status_label = e(status) if status else "Unknown"
+
+    city = area.get("city") or ""
+    location = area.get("location") or ""
+    loc_parts = [p for p in [city, location] if p]
+    location_html = (
+        f'<div class="ra-location">{e(" \u2014 ".join(loc_parts))}</div>'
+        if loc_parts else ""
+    )
+
+    amenity_map = [
+        ("restroom", "Restroom"),
+        ("ramada", "Ramada"),
+        ("visitor_center", "Visitor Center"),
+        ("travel_information", "Travel Info"),
+        ("vending_machine", "Vending"),
+    ]
+    amenity_tags = "".join(
+        f'<span class="ra-amenity">{label}</span>'
+        for key, label in amenity_map
+        if area.get(key)
+    )
+    amenities_html = (
+        f'<div class="ra-amenities">{amenity_tags}</div>'
+        if amenity_tags else ""
+    )
+
+    total = area.get("total_truck_spaces")
+    available = area.get("available_truck_spaces")
+    if total is not None:
+        avail_str = e(str(available)) if available is not None else "?"
+        trucks_html = (
+            f'<div class="ra-trucks">Truck spaces: {avail_str}\u2009/\u2009{e(str(total))} available</div>'
+        )
+    else:
+        trucks_html = ""
+
+    return (
+        f'<div class="{card_cls}">'
+        f'<div class="ra-card-header">'
+        f'<span class="ra-name">{name}</span>'
+        f'<span class="{badge_cls}">{status_label}</span>'
+        f"</div>"
+        f"{location_html}"
+        f"{amenities_html}"
+        f"{trucks_html}"
+        f"</div>"
+    )
+
+
+def render_rest_areas_section(areas: list[dict]) -> str:
+    """Return HTML for the rest areas grid."""
+    if not areas:
+        return ""
+    cards_html = "".join(render_rest_area_card(a) for a in areas)
+    return f'<div class="ra-grid">{cards_html}</div>'
+
+
+# ---------------------------------------------------------------------------
 # Page assembly
 # ---------------------------------------------------------------------------
 
@@ -987,12 +1204,14 @@ def render_page(
     total: int,
     boards: list[dict] | None = None,
     stations: list[dict] | None = None,
+    rest_areas: list[dict] | None = None,
 ) -> str:
-    """Assemble the complete HTML document with 4-tab layout."""
+    """Assemble the complete HTML document with 5-tab layout."""
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     roadway_count = len(roadways)
     boards = boards or []
     stations = stations or []
+    rest_areas = rest_areas or []
 
     camera_sections = "".join(
         render_roadway_section(roadway, cameras, first=(i == 0))
@@ -1000,6 +1219,7 @@ def render_page(
     )
     boards_html = render_message_boards_section(boards)
     weather_html = render_weather_section(stations)
+    rest_areas_html = render_rest_areas_section(rest_areas)
 
     # Build JSON data for the map (injected into the JS template via .replace,
     # NOT via f-string, to avoid conflicts with Leaflet's {s}/{z}/{x}/{y} tile URL).
@@ -1007,11 +1227,13 @@ def render_page(
     cameras_json = json.dumps(all_cameras).replace("</", "<\\/")
     boards_json = json.dumps(boards).replace("</", "<\\/")
     weather_json = json.dumps(stations).replace("</", "<\\/")
+    rest_areas_json = json.dumps(rest_areas).replace("</", "<\\/")
     map_js = (
         _MAP_JS_TEMPLATE
         .replace("%%CAMERAS%%", cameras_json)
         .replace("%%BOARDS%%", boards_json)
         .replace("%%WEATHER%%", weather_json)
+        .replace("%%REST_AREAS%%", rest_areas_json)
     )
 
     meta_parts = [f"{total} cameras on {roadway_count} roadways"]
@@ -1019,6 +1241,8 @@ def render_page(
         meta_parts.append(f"{len(boards)} message boards")
     if stations:
         meta_parts.append(f"{len(stations)} weather stations")
+    if rest_areas:
+        meta_parts.append(f"{len(rest_areas)} rest areas")
     meta_str = " &mdash; ".join(e(p) for p in meta_parts)
 
     # The f-string ends before the Leaflet/tab script tags so that Leaflet's
@@ -1043,10 +1267,11 @@ def render_page(
       <span class="meta">Generated {e(timestamp)}</span>
     </div>
     <nav class="tab-bar" role="tablist">
-      <button id="tab-btn-map"     class="tab-btn" data-tab="map"     role="tab">Map</button>
-      <button id="tab-btn-weather" class="tab-btn" data-tab="weather" role="tab">Weather</button>
-      <button id="tab-btn-boards"  class="tab-btn" data-tab="boards"  role="tab">Message Boards</button>
-      <button id="tab-btn-cameras" class="tab-btn" data-tab="cameras" role="tab">Cameras</button>
+      <button id="tab-btn-map"       class="tab-btn" data-tab="map"       role="tab">Map</button>
+      <button id="tab-btn-weather"   class="tab-btn" data-tab="weather"   role="tab">Weather</button>
+      <button id="tab-btn-boards"    class="tab-btn" data-tab="boards"    role="tab">Message Boards</button>
+      <button id="tab-btn-cameras"   class="tab-btn" data-tab="cameras"   role="tab">Cameras</button>
+      <button id="tab-btn-restareas" class="tab-btn" data-tab="restareas" role="tab">Rest Areas</button>
     </nav>
   </header>
   <main>
@@ -1062,6 +1287,9 @@ def render_page(
     </div>
     <div id="tab-cameras" class="tab-content">
       {camera_sections}
+    </div>
+    <div id="tab-restareas" class="tab-content">
+      {rest_areas_html if rest_areas_html else '<p style="padding:1rem;color:#888">No rest area data available.</p>'}
     </div>
   </main>
   <footer>
@@ -1080,6 +1308,7 @@ def build(
     cameras_path: str = "cameras.json",
     boards_path: str = "message_boards.json",
     weather_path: str = "weather_stations.json",
+    rest_areas_path: str = "rest_areas.json",
     output_path: str = "az511.html",
 ) -> None:
     """Load all data sources, render HTML, write to file."""
@@ -1088,6 +1317,7 @@ def build(
     total = sum(len(v) for v in roadways.values())
     boards = load_message_boards_data(boards_path)
     stations = load_weather_stations_data(weather_path)
+    rest_areas = load_rest_areas_data(rest_areas_path)
 
     # Correlate weather stations with camera locations via shared ADOT source_id.
     source_id_to_location = {
@@ -1101,11 +1331,12 @@ def build(
                 station.get("camera_source_id")
             )
 
-    html = render_page(roadways, total, boards, stations)
+    html = render_page(roadways, total, boards, stations, rest_areas)
     Path(output_path).write_text(html, encoding="utf-8")
     print(
         f"Built {output_path} — {len(roadways)} roadways, {total} cameras, "
-        f"{len(boards)} message boards, {len(stations)} weather stations"
+        f"{len(boards)} message boards, {len(stations)} weather stations, "
+        f"{len(rest_areas)} rest areas"
     )
 
 

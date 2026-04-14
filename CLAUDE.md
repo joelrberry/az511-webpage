@@ -4,7 +4,7 @@
 
 Two-phase static site pipeline that fetches live Arizona 511 traffic data and builds a single-file HTML viewer:
 
-1. **`python fetch.py`** — Calls the AZ511 API, writes `cameras.json` + `message_boards.json` + `weather_stations.json`
+1. **`python fetch.py`** — Calls the AZ511 API, writes `cameras.json` + `message_boards.json` + `weather_stations.json` + `rest_areas.json`
 2. **`python build.py`** — Reads those JSON files, generates `az511.html`
 
 Open `az511.html` directly in a browser — no server needed.
@@ -12,15 +12,16 @@ Open `az511.html` directly in a browser — no server needed.
 ## Architecture
 
 ```
-fetch.py  →  cameras.json + message_boards.json + weather_stations.json
-build.py  →  az511.html  (4-tab layout: Map | Weather | Message Boards | Cameras)
+fetch.py  →  cameras.json + message_boards.json + weather_stations.json + rest_areas.json
+build.py  →  az511.html  (5-tab layout: Map | Weather | Message Boards | Cameras | Rest Areas)
 ```
 
-The HTML page has a sticky tab bar (URL hash navigation: `#map`, `#weather`, `#boards`, `#cameras`):
-- **Map** — Leaflet.js (CartoDB Voyager tiles), blue pins for cameras, amber pins for VMS boards, color-coded pins for weather stations
+The HTML page has a sticky tab bar (URL hash navigation: `#map`, `#weather`, `#boards`, `#cameras`, `#restareas`):
+- **Map** — Leaflet.js (CartoDB Voyager tiles), blue pins for cameras, amber pins for VMS boards, color-coded pins for weather stations, green/red pins for rest areas
 - **Weather** — Grid of weather station cards color-coded by road grip level (green=dry, amber=wet, blue=icy)
 - **Message Boards** — Amber LED / VMS-style cards, one collapsible `<details>` per roadway (first open, rest closed) — same layout pattern as Cameras
 - **Cameras** — Image grids, one collapsible `<details>` per roadway (first open, rest closed)
+- **Rest Areas** — Grid of cards showing name, open/closed status, city/location, amenities (restroom, ramada, visitor center, travel info, vending), and truck space availability
 
 ## Extensibility pattern
 
@@ -51,6 +52,7 @@ Then add a tab panel in `render_page()` and a tab button in the nav.
 | `cameras.json` | Fetched camera data (generated, not committed) |
 | `message_boards.json` | Fetched VMS board data (generated, not committed) |
 | `weather_stations.json` | Fetched weather station data (generated, not committed) |
+| `rest_areas.json` | Fetched rest area data (generated, not committed) |
 | `az511.html` | Final output HTML (generated, not committed) |
 | `tests/test_fetch.py` | Unit tests for fetch.py (mocked API) |
 | `tests/test_build.py` | Unit tests for build.py (no file I/O) |
@@ -64,7 +66,7 @@ pip install -r requirements.txt
 cp .env.example .env   # add your AZ511_API_KEY
 
 # Run
-python fetch.py        # fetch data → cameras.json + message_boards.json + weather_stations.json
+python fetch.py        # fetch data → cameras.json + message_boards.json + weather_stations.json + rest_areas.json
 python build.py        # build → az511.html
 open az511.html
 
@@ -78,7 +80,7 @@ Free key at https://www.az511.com/my511/register — stored in `.env` as `AZ511_
 
 ## AZ511 API rate limit
 
-10 requests per 60 seconds. `fetch.py` makes 3 requests (cameras + message boards + weather stations).
+10 requests per 60 seconds. `fetch.py` makes 4 requests (cameras + message boards + weather stations + rest areas).
 
 ## JS template notes
 
@@ -90,7 +92,7 @@ Free key at https://www.az511.com/my511/register — stored in `.env` as `AZ511_
 
 ## Map legend / layer toggling
 
-Each marker type (cameras, message boards, weather stations) is added to its own `L.layerGroup()` (`cameraLayer`, `boardLayer`, `weatherLayer`). A Leaflet custom control (`legendControl`, positioned `topright`) renders toggle buttons — one per type. Clicking a button calls `map.addLayer()` / `map.removeLayer()` and toggles an `active` CSS class that dims the button when the layer is hidden. The control is only shown for types that have at least one mapped marker.
+Each marker type (cameras, message boards, weather stations, rest areas) is added to its own `L.layerGroup()` (`cameraLayer`, `boardLayer`, `weatherLayer`, `restAreaLayer`). A Leaflet custom control (`legendControl`, positioned `topright`) renders toggle buttons — one per type. Clicking a button calls `map.addLayer()` / `map.removeLayer()` and toggles an `active` CSS class that dims the button when the layer is hidden. The control is only shown for types that have at least one mapped marker.
 
 ## Weather station ↔ camera correlation
 
@@ -99,6 +101,15 @@ Weather stations are correlated to cameras via a shared ADOT UUID:
 - `Camera.source_id` (in `cameras.json`) = `WeatherStation.camera_source_id` (in `weather_stations.json`)
 
 `build()` builds a `source_id → location` lookup from `cameras.json` and writes a `location` field onto each weather station dict before passing them to `render_page()`. This means `weather_stations.json` does **not** contain the location string — it is enriched at build time. All 17 current weather stations match a camera.
+
+## Rest area status color coding
+
+`_status_class(status)` maps a rest area status string to a CSS class:
+- `status-open` (green `#38A169`): status contains "OPEN"
+- `status-closed` (red `#E53E3E`): status contains "CLOSE"
+- empty string: unknown / None → gray `#718096`
+
+Map pins use `makeRestAreaSvg(status)` (same color logic in JS). Cards use `.ra-card.status-open` / `.ra-card.status-closed` for the top border color.
 
 ## Weather temperature note
 

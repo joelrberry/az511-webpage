@@ -9,15 +9,19 @@ import pytest
 
 from build import (
     _grip_class,
+    _status_class,
     build,
     e,
     group_by_roadway,
     load_cameras_data,
     load_message_boards_data,
+    load_rest_areas_data,
     load_weather_stations_data,
     render_message_board_card,
     render_message_boards_section,
     render_page,
+    render_rest_area_card,
+    render_rest_areas_section,
     render_roadway_section,
     render_view_card,
     render_weather_card,
@@ -330,19 +334,21 @@ class TestRenderPage:
         html = render_page(sample_roadways, total=3)
         assert 'class="tab-bar"' in html
 
-    def test_all_four_tab_buttons_present(self, sample_roadways):
+    def test_core_tab_buttons_present(self, sample_roadways):
         html = render_page(sample_roadways, total=3)
         assert 'id="tab-btn-map"' in html
         assert 'id="tab-btn-weather"' in html
         assert 'id="tab-btn-boards"' in html
         assert 'id="tab-btn-cameras"' in html
+        assert 'id="tab-btn-restareas"' in html
 
-    def test_all_four_tab_panels_present(self, sample_roadways):
+    def test_core_tab_panels_present(self, sample_roadways):
         html = render_page(sample_roadways, total=3)
         assert 'id="tab-map"' in html
         assert 'id="tab-weather"' in html
         assert 'id="tab-boards"' in html
         assert 'id="tab-cameras"' in html
+        assert 'id="tab-restareas"' in html
 
     def test_tab_js_show_tab_function_present(self, sample_roadways):
         html = render_page(sample_roadways, total=3)
@@ -750,3 +756,239 @@ class TestRenderWeatherSection:
         html = render_weather_section([sample_station, sample_station_no_data])
         assert "Station #42" in html
         assert "Station #99" in html
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for rest area tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def sample_rest_area():
+    return {
+        "id": 1,
+        "name": "Picacho Peak Rest Area",
+        "status": "Open",
+        "location": "I-10, MM 219",
+        "city": "Picacho",
+        "latitude": 32.64,
+        "longitude": -111.40,
+        "restroom": True,
+        "ramada": False,
+        "visitor_center": True,
+        "travel_information": True,
+        "vending_machine": True,
+        "total_truck_spaces": 20,
+        "available_truck_spaces": 12,
+    }
+
+
+@pytest.fixture
+def sample_rest_area_minimal():
+    return {
+        "id": 2,
+        "name": "Desert Stop",
+        "status": "Closed",
+        "location": None,
+        "city": None,
+        "latitude": 33.1,
+        "longitude": -112.0,
+        "restroom": False,
+        "ramada": False,
+        "visitor_center": False,
+        "travel_information": False,
+        "vending_machine": False,
+        "total_truck_spaces": None,
+        "available_truck_spaces": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# load_rest_areas_data
+# ---------------------------------------------------------------------------
+
+class TestLoadRestAreasData:
+    def test_loads_valid_json(self, tmp_path, sample_rest_area):
+        p = tmp_path / "rest_areas.json"
+        p.write_text(json.dumps([sample_rest_area]), encoding="utf-8")
+        result = load_rest_areas_data(str(p))
+        assert result == [sample_rest_area]
+
+    def test_returns_empty_list_for_missing_file(self, tmp_path):
+        missing = str(tmp_path / "nonexistent.json")
+        result = load_rest_areas_data(missing)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _status_class
+# ---------------------------------------------------------------------------
+
+class TestStatusClass:
+    def test_open_variants(self):
+        assert _status_class("Open") == "status-open"
+        assert _status_class("OPEN") == "status-open"
+        assert _status_class("open") == "status-open"
+
+    def test_closed_variants(self):
+        assert _status_class("Closed") == "status-closed"
+        assert _status_class("CLOSED") == "status-closed"
+
+    def test_none_returns_empty(self):
+        assert _status_class(None) == ""
+
+    def test_unknown_returns_empty(self):
+        assert _status_class("Under Construction") == ""
+
+
+# ---------------------------------------------------------------------------
+# render_rest_area_card
+# ---------------------------------------------------------------------------
+
+class TestRenderRestAreaCard:
+    def test_contains_name(self, sample_rest_area):
+        html = render_rest_area_card(sample_rest_area)
+        assert "Picacho Peak Rest Area" in html
+
+    def test_contains_status_badge(self, sample_rest_area):
+        html = render_rest_area_card(sample_rest_area)
+        assert "ra-status-badge" in html
+        assert "Open" in html
+
+    def test_status_open_class_applied(self, sample_rest_area):
+        html = render_rest_area_card(sample_rest_area)
+        assert "status-open" in html
+
+    def test_status_closed_class_applied(self, sample_rest_area_minimal):
+        html = render_rest_area_card(sample_rest_area_minimal)
+        assert "status-closed" in html
+
+    def test_location_shown_when_present(self, sample_rest_area):
+        html = render_rest_area_card(sample_rest_area)
+        assert "Picacho" in html
+        assert "I-10, MM 219" in html
+
+    def test_no_location_element_when_none(self, sample_rest_area_minimal):
+        html = render_rest_area_card(sample_rest_area_minimal)
+        assert "ra-location" not in html
+
+    def test_amenities_shown(self, sample_rest_area):
+        html = render_rest_area_card(sample_rest_area)
+        assert "Restroom" in html
+        assert "Visitor Center" in html
+        assert "Travel Info" in html
+        assert "Vending" in html
+
+    def test_absent_amenities_not_shown(self, sample_rest_area):
+        # sample_rest_area has ramada=False
+        html = render_rest_area_card(sample_rest_area)
+        assert "Ramada" not in html
+
+    def test_truck_spaces_shown(self, sample_rest_area):
+        html = render_rest_area_card(sample_rest_area)
+        assert "12" in html
+        assert "20" in html
+
+    def test_no_truck_spaces_when_none(self, sample_rest_area_minimal):
+        html = render_rest_area_card(sample_rest_area_minimal)
+        assert "ra-trucks" not in html
+
+    def test_no_crash_on_minimal_fields(self, sample_rest_area_minimal):
+        html = render_rest_area_card(sample_rest_area_minimal)
+        assert "Desert Stop" in html
+
+    def test_escapes_special_chars_in_name(self):
+        area = {
+            "id": 3, "name": '<b>Rest & "Area"</b>', "status": "Open",
+            "location": None, "city": None, "latitude": 33.0, "longitude": -112.0,
+            "restroom": False, "ramada": False, "visitor_center": False,
+            "travel_information": False, "vending_machine": False,
+            "total_truck_spaces": None, "available_truck_spaces": None,
+        }
+        html = render_rest_area_card(area)
+        assert "<b>" not in html
+        assert "&lt;b&gt;" in html
+
+
+# ---------------------------------------------------------------------------
+# render_rest_areas_section
+# ---------------------------------------------------------------------------
+
+class TestRenderRestAreasSection:
+    def test_empty_returns_empty_string(self):
+        assert render_rest_areas_section([]) == ""
+
+    def test_grid_class_present(self, sample_rest_area):
+        html = render_rest_areas_section([sample_rest_area])
+        assert "ra-grid" in html
+
+    def test_card_included(self, sample_rest_area):
+        html = render_rest_areas_section([sample_rest_area])
+        assert "Picacho Peak Rest Area" in html
+
+    def test_multiple_areas_all_rendered(self, sample_rest_area, sample_rest_area_minimal):
+        html = render_rest_areas_section([sample_rest_area, sample_rest_area_minimal])
+        assert "Picacho Peak Rest Area" in html
+        assert "Desert Stop" in html
+
+
+# ---------------------------------------------------------------------------
+# render_page — rest areas tab
+# ---------------------------------------------------------------------------
+
+class TestRenderPageRestAreas:
+    def test_rest_areas_tab_button_present(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert 'id="tab-btn-restareas"' in html
+
+    def test_rest_areas_tab_panel_present(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert 'id="tab-restareas"' in html
+
+    def test_rest_areas_rendered_when_provided(self, sample_roadways, sample_rest_area):
+        html = render_page(sample_roadways, total=3, rest_areas=[sample_rest_area])
+        assert "Picacho Peak Rest Area" in html
+
+    def test_rest_areas_empty_message_when_none(self, sample_roadways):
+        html = render_page(sample_roadways, total=3, rest_areas=[])
+        assert "No rest area data available" in html
+
+    def test_rest_area_layer_in_map_js(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert "restAreaLayer" in html
+
+    def test_rest_areas_tab_in_tab_js(self, sample_roadways):
+        html = render_page(sample_roadways, total=3)
+        assert "restareas" in html
+
+
+# ---------------------------------------------------------------------------
+# build — rest_areas_path parameter
+# ---------------------------------------------------------------------------
+
+class TestBuildRestAreasPath:
+    def test_rest_areas_path_param_accepted(self, tmp_path, sample_cameras):
+        cameras_file = tmp_path / "cameras.json"
+        ra_file = tmp_path / "ra.json"
+        output_file = tmp_path / "az511.html"
+        cameras_file.write_text(json.dumps(sample_cameras), encoding="utf-8")
+        # rest_areas file missing — build should still succeed (optional)
+        build(
+            cameras_path=str(cameras_file),
+            rest_areas_path=str(ra_file),
+            output_path=str(output_file),
+        )
+        assert output_file.exists()
+
+    def test_rest_areas_included_in_output(self, tmp_path, sample_cameras, sample_rest_area):
+        cameras_file = tmp_path / "cameras.json"
+        ra_file = tmp_path / "rest_areas.json"
+        output_file = tmp_path / "az511.html"
+        cameras_file.write_text(json.dumps(sample_cameras), encoding="utf-8")
+        ra_file.write_text(json.dumps([sample_rest_area]), encoding="utf-8")
+        build(
+            cameras_path=str(cameras_file),
+            rest_areas_path=str(ra_file),
+            output_path=str(output_file),
+        )
+        content = output_file.read_text(encoding="utf-8")
+        assert "Picacho Peak Rest Area" in content

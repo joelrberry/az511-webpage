@@ -10,12 +10,15 @@ from fetch import (
     filter_message_boards,
     load_cameras,
     load_message_boards,
+    load_rest_areas,
     load_weather_stations,
     save_cameras,
     save_message_boards,
+    save_rest_areas,
     save_weather_stations,
     serialize_camera,
     serialize_message_board,
+    serialize_rest_area,
     serialize_weather_station,
     sort_cameras,
 )
@@ -628,6 +631,199 @@ class TestSaveWeatherStations:
                      "max_wind_speed": None, "last_updated": None}]
         output = tmp_path / "weather_stations.json"
         save_weather_stations(stations, path=str(output))
+
+        content = output.read_text()
+        assert "\n" in content
+
+
+# ---------------------------------------------------------------------------
+# Helpers for rest area tests
+# ---------------------------------------------------------------------------
+
+def _make_rest_area(
+    id=1,
+    name="Picacho Peak Rest Area",
+    status="Open",
+    location="I-10, MM 219",
+    city="Picacho",
+    latitude=32.64,
+    longitude=-111.40,
+    restroom=True,
+    ramada=False,
+    visitor_center=False,
+    travel_information=True,
+    vending_machine=True,
+    total_truck_spaces=20,
+    available_truck_spaces=12,
+):
+    return types.SimpleNamespace(
+        id=id,
+        name=name,
+        status=status,
+        location=location,
+        city=city,
+        latitude=latitude,
+        longitude=longitude,
+        restroom=restroom,
+        ramada=ramada,
+        visitor_center=visitor_center,
+        travel_information=travel_information,
+        vending_machine=vending_machine,
+        total_truck_spaces=total_truck_spaces,
+        available_truck_spaces=available_truck_spaces,
+    )
+
+
+# ---------------------------------------------------------------------------
+# serialize_rest_area
+# ---------------------------------------------------------------------------
+
+class TestSerializeRestArea:
+    def test_all_fields_present(self):
+        area = _make_rest_area()
+        result = serialize_rest_area(area)
+        assert set(result.keys()) == {
+            "id", "name", "status", "location", "city",
+            "latitude", "longitude", "restroom", "ramada",
+            "visitor_center", "travel_information", "vending_machine",
+            "total_truck_spaces", "available_truck_spaces",
+        }
+
+    def test_field_values(self):
+        area = _make_rest_area(id=5, name="Test Area", status="Open", city="Tucson")
+        result = serialize_rest_area(area)
+        assert result["id"] == 5
+        assert result["name"] == "Test Area"
+        assert result["status"] == "Open"
+        assert result["city"] == "Tucson"
+
+    def test_bool_fields_preserved(self):
+        area = _make_rest_area(restroom=True, ramada=False, visitor_center=True,
+                               travel_information=False, vending_machine=True)
+        result = serialize_rest_area(area)
+        assert result["restroom"] is True
+        assert result["ramada"] is False
+        assert result["visitor_center"] is True
+        assert result["travel_information"] is False
+        assert result["vending_machine"] is True
+
+    def test_truck_spaces_preserved(self):
+        area = _make_rest_area(total_truck_spaces=30, available_truck_spaces=15)
+        result = serialize_rest_area(area)
+        assert result["total_truck_spaces"] == 30
+        assert result["available_truck_spaces"] == 15
+
+    def test_none_optional_fields(self):
+        area = _make_rest_area(location=None, city=None,
+                               total_truck_spaces=None, available_truck_spaces=None)
+        result = serialize_rest_area(area)
+        assert result["location"] is None
+        assert result["city"] is None
+        assert result["total_truck_spaces"] is None
+        assert result["available_truck_spaces"] is None
+
+    def test_coordinates_preserved(self):
+        area = _make_rest_area(latitude=32.64, longitude=-111.40)
+        result = serialize_rest_area(area)
+        assert result["latitude"] == 32.64
+        assert result["longitude"] == -111.40
+
+
+# ---------------------------------------------------------------------------
+# load_rest_areas (mocked)
+# ---------------------------------------------------------------------------
+
+class TestLoadRestAreas:
+    def test_calls_get_rest_areas_once(self, mocker):
+        mock_client_cls = mocker.patch("fetch.AZ511Client")
+        mock_client = mock_client_cls.return_value
+        mock_client.get_rest_areas.return_value = []
+
+        load_rest_areas()
+
+        mock_client.get_rest_areas.assert_called_once()
+
+    def test_returns_serialized_dicts(self, mocker):
+        mock_client_cls = mocker.patch("fetch.AZ511Client")
+        mock_client = mock_client_cls.return_value
+        mock_client.get_rest_areas.return_value = [_make_rest_area()]
+
+        result = load_rest_areas()
+
+        assert len(result) == 1
+        assert result[0]["name"] == "Picacho Peak Rest Area"
+
+    def test_passes_api_key_when_provided(self, mocker):
+        mock_client_cls = mocker.patch("fetch.AZ511Client")
+        mock_client_cls.return_value.get_rest_areas.return_value = []
+
+        load_rest_areas(api_key="test-key-789")
+
+        mock_client_cls.assert_called_once_with(api_key="test-key-789")
+
+    def test_no_api_key_uses_default_constructor(self, mocker):
+        mock_client_cls = mocker.patch("fetch.AZ511Client")
+        mock_client_cls.return_value.get_rest_areas.return_value = []
+
+        load_rest_areas()
+
+        mock_client_cls.assert_called_once_with()
+
+    def test_auth_error_raises_runtime_error(self, mocker):
+        from az511.exceptions import AuthError
+        mock_client_cls = mocker.patch("fetch.AZ511Client")
+        mock_client_cls.return_value.get_rest_areas.side_effect = AuthError("bad key")
+
+        with pytest.raises(RuntimeError, match="Invalid API key"):
+            load_rest_areas()
+
+    def test_rate_limit_error_raises_runtime_error(self, mocker):
+        from az511.exceptions import RateLimitError
+        mock_client_cls = mocker.patch("fetch.AZ511Client")
+        mock_client_cls.return_value.get_rest_areas.side_effect = RateLimitError("429")
+
+        with pytest.raises(RuntimeError, match="rate limit"):
+            load_rest_areas()
+
+    def test_api_error_raises_runtime_error(self, mocker):
+        from az511.exceptions import APIError
+        mock_client_cls = mocker.patch("fetch.AZ511Client")
+        mock_client_cls.return_value.get_rest_areas.side_effect = APIError(500, "error")
+
+        with pytest.raises(RuntimeError, match="API error"):
+            load_rest_areas()
+
+
+# ---------------------------------------------------------------------------
+# save_rest_areas
+# ---------------------------------------------------------------------------
+
+class TestSaveRestAreas:
+    def test_writes_valid_json(self, tmp_path):
+        areas = [
+            {"id": 1, "name": "Picacho Peak", "status": "Open",
+             "location": "I-10 MM 219", "city": "Picacho",
+             "latitude": 32.64, "longitude": -111.40,
+             "restroom": True, "ramada": False, "visitor_center": False,
+             "travel_information": True, "vending_machine": True,
+             "total_truck_spaces": 20, "available_truck_spaces": 12},
+        ]
+        output = tmp_path / "rest_areas.json"
+        save_rest_areas(areas, path=str(output))
+
+        assert output.exists()
+        loaded = json.loads(output.read_text())
+        assert loaded == areas
+
+    def test_file_is_pretty_printed(self, tmp_path):
+        areas = [{"id": 1, "name": "Test", "status": "Open",
+                  "location": None, "city": None,
+                  "latitude": 33.4, "longitude": -112.1,
+                  "restroom": False, "ramada": False, "visitor_center": False,
+                  "travel_information": False, "vending_machine": False,
+                  "total_truck_spaces": None, "available_truck_spaces": None}]
+        output = tmp_path / "rest_areas.json"
+        save_rest_areas(areas, path=str(output))
 
         content = output.read_text()
         assert "\n" in content
