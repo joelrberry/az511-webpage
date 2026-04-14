@@ -8,5 +8,6 @@ __pycache__/
 cameras.json
 message_boards.json
 weather_stations.json
+rest_areas.json
 az511.html
 cameras.html
