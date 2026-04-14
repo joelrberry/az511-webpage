@@ -86,6 +86,7 @@ def sample_roadways(sample_cameras):
 def sample_station():
     return {
         "id": 42,
+        "camera_source_id": "abc-uuid-123",
         "latitude": 33.4,
         "longitude": -112.1,
         "air_temperature": 22.0,
@@ -96,6 +97,7 @@ def sample_station():
         "level_of_grip": "DRY",
         "max_wind_speed": 18.0,
         "last_updated": "2024-06-15T12:00:00+00:00",
+        "location": "I-40 @ 132.25",
     }
 
 
@@ -103,6 +105,7 @@ def sample_station():
 def sample_station_no_data():
     return {
         "id": 99,
+        "camera_source_id": None,
         "latitude": 33.6,
         "longitude": -111.9,
         "air_temperature": None,
@@ -113,6 +116,7 @@ def sample_station_no_data():
         "level_of_grip": None,
         "max_wind_speed": None,
         "last_updated": None,
+        "location": None,
     }
 
 
@@ -634,6 +638,79 @@ class TestRenderWeatherCard:
     def test_unknown_grip_label_when_none(self, sample_station_no_data):
         html = render_weather_card(sample_station_no_data)
         assert "Unknown" in html
+
+    def test_location_shown_when_present(self, sample_station):
+        html = render_weather_card(sample_station)
+        assert "I-40 @ 132.25" in html
+
+    def test_no_location_element_when_none(self, sample_station_no_data):
+        html = render_weather_card(sample_station_no_data)
+        assert "wx-location" not in html
+
+
+# ---------------------------------------------------------------------------
+# Camera → weather station location enrichment (happens in build())
+# ---------------------------------------------------------------------------
+
+class TestWeatherStationLocationEnrichment:
+    """Verify that build() annotates stations with the matched camera location."""
+
+    def _write_json(self, tmp_path, name, data):
+        p = tmp_path / name
+        p.write_text(json.dumps(data), encoding="utf-8")
+        return str(p)
+
+    def _sample_cameras(self, source_id="abc-uuid-123"):
+        return [
+            {
+                "roadway": "I-40",
+                "location": "I-40 @ 132.25",
+                "latitude": 35.2,
+                "longitude": -112.7,
+                "source_id": source_id,
+                "views": [{"id": "v1", "url": "http://x.com/cam.jpg",
+                           "description": "NB", "status": "Enabled"}],
+            }
+        ]
+
+    def _sample_stations(self, camera_source_id="abc-uuid-123"):
+        return [
+            {
+                "id": 42,
+                "camera_source_id": camera_source_id,
+                "latitude": 35.2,
+                "longitude": -112.7,
+                "air_temperature": 22.0,
+                "surface_temperature": 20.0,
+                "wind_speed": 10.0,
+                "wind_direction": "NE",
+                "relative_humidity": 45.0,
+                "level_of_grip": "DRY",
+                "max_wind_speed": 18.0,
+                "last_updated": None,
+            }
+        ]
+
+    def test_matched_station_gets_location(self, tmp_path):
+        cameras_path = self._write_json(tmp_path, "cameras.json", self._sample_cameras())
+        stations_path = self._write_json(tmp_path, "wx.json", self._sample_stations())
+        output_path = str(tmp_path / "out.html")
+
+        build(cameras_path=cameras_path, weather_path=stations_path, output_path=output_path)
+
+        html = (tmp_path / "out.html").read_text(encoding="utf-8")
+        assert "I-40 @ 132.25" in html
+
+    def test_unmatched_station_has_no_location_element(self, tmp_path):
+        cameras_path = self._write_json(tmp_path, "cameras.json", self._sample_cameras("uuid-A"))
+        stations_path = self._write_json(tmp_path, "wx.json", self._sample_stations("uuid-B"))
+        output_path = str(tmp_path / "out.html")
+
+        build(cameras_path=cameras_path, weather_path=stations_path, output_path=output_path)
+
+        html = (tmp_path / "out.html").read_text(encoding="utf-8")
+        # wx-location element only renders when a station has a matched location
+        assert 'class="wx-location"' not in html
 
 
 # ---------------------------------------------------------------------------

@@ -60,6 +60,7 @@ def _make_camera(
     location="I-10 WB at 43rd Ave",
     latitude=33.4,
     longitude=-112.1,
+    source_id="abc-123",
     views=None,
 ):
     if views is None:
@@ -69,6 +70,7 @@ def _make_camera(
         location=location,
         latitude=latitude,
         longitude=longitude,
+        source_id=source_id,
         views=views,
     )
 
@@ -81,7 +83,7 @@ class TestSerializeCamera:
     def test_all_fields_present(self):
         cam = _make_camera()
         result = serialize_camera(cam)
-        assert set(result.keys()) == {"roadway", "location", "latitude", "longitude", "views"}
+        assert set(result.keys()) == {"roadway", "location", "latitude", "longitude", "source_id", "views"}
 
     def test_field_values(self):
         cam = _make_camera(roadway="SR-101", location="SR-101 NB at Bell Rd", latitude=33.6, longitude=-112.0)
@@ -449,6 +451,7 @@ class TestFilterMessageBoards:
 
 def _make_station(
     id=42,
+    camera_source_id="abc-123",
     latitude=33.4,
     longitude=-112.1,
     air_temperature=22.0,
@@ -462,6 +465,7 @@ def _make_station(
 ):
     return types.SimpleNamespace(
         id=id,
+        camera_source_id=camera_source_id,
         latitude=latitude,
         longitude=longitude,
         air_temperature=air_temperature,
@@ -484,12 +488,17 @@ class TestSerializeWeatherStation:
         st = _make_station()
         result = serialize_weather_station(st)
         assert set(result.keys()) == {
-            "id", "latitude", "longitude",
+            "id", "camera_source_id", "latitude", "longitude",
             "air_temperature", "surface_temperature",
             "wind_speed", "wind_direction",
             "relative_humidity", "level_of_grip",
             "max_wind_speed", "last_updated",
         }
+
+    def test_camera_source_id_preserved(self):
+        st = _make_station(camera_source_id="dead-beef-1234")
+        result = serialize_weather_station(st)
+        assert result["camera_source_id"] == "dead-beef-1234"
 
     def test_field_values(self):
         st = _make_station(id=7, latitude=33.5, longitude=-112.0, level_of_grip="WET")

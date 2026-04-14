@@ -51,12 +51,14 @@ def serialize_camera(cam) -> dict:
     """Convert a Camera model instance to a plain dict.
 
     Only views with status == 'Enabled' are included.
+    source_id is the ADOT UUID used to correlate cameras with weather stations.
     """
     return {
         "roadway": cam.roadway.upper() if cam.roadway else cam.roadway,
         "location": cam.location,
         "latitude": cam.latitude,
         "longitude": cam.longitude,
+        "source_id": cam.source_id,
         "views": [
             {
                 "id": view.id,
@@ -176,9 +178,14 @@ def load_weather_stations(api_key: str | None = None) -> list[dict]:
 
 
 def serialize_weather_station(station) -> dict:
-    """Convert a WeatherStation model instance to a plain dict."""
+    """Convert a WeatherStation model instance to a plain dict.
+
+    camera_source_id is the ADOT UUID that matches Camera.source_id,
+    used by build.py to annotate each station with a human-readable location.
+    """
     return {
         "id": station.id,
+        "camera_source_id": station.camera_source_id,
         "latitude": station.latitude,
         "longitude": station.longitude,
         "air_temperature": station.air_temperature,

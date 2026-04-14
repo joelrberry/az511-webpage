@@ -88,6 +88,14 @@ Free key at https://www.az511.com/my511/register — stored in `.env` as `AZ511_
 
 `window._az511Map` is set in the map JS so the tab switcher can call `map.invalidateSize()` when switching to the Map tab — necessary because Leaflet can't compute tile layout while the panel is hidden.
 
+## Weather station ↔ camera correlation
+
+Weather stations are correlated to cameras via a shared ADOT UUID:
+
+- `Camera.source_id` (in `cameras.json`) = `WeatherStation.camera_source_id` (in `weather_stations.json`)
+
+`build()` builds a `source_id → location` lookup from `cameras.json` and writes a `location` field onto each weather station dict before passing them to `render_page()`. This means `weather_stations.json` does **not** contain the location string — it is enriched at build time. All 17 current weather stations match a camera.
+
 ## Weather temperature note
 
 The AZ511 API returns temperatures in **Celsius**. Both the Python card renderer (`render_weather_card`) and the JS map popup convert to Fahrenheit for display.

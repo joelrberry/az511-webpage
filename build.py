@@ -375,6 +375,16 @@ details[open] > summary::before { transform: rotate(90deg); }
 .grip-badge.grip-wet { background: #D97706; }
 .grip-badge.grip-icy { background: #3182CE; }
 
+.wx-location {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #1a1a2e;
+  padding: 0 0.8rem 0.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .wx-temp {
   font-size: 2.2rem;
   font-weight: 300;
@@ -652,15 +662,17 @@ _MAP_JS_TEMPLATE = """\
     var wind = st.wind_speed != null ? st.wind_speed.toFixed(0) + ' mph' : '--';
     var dir  = st.wind_direction || '';
     var grip = st.level_of_grip || 'Unknown';
+    var locLine = st.location ? '<div style="font-size:0.78rem;font-weight:600;margin-bottom:4px">' + esc(st.location) + '</div>' : '';
     var popup = '<div class="map-popup">'
       + '<strong>Station #' + esc(st.id) + '</strong>'
+      + locLine
       + '<div style="font-size:0.8rem;color:#555">'
       + 'Air: ' + temp + ' &nbsp; Surface: ' + surf + '<br>'
       + 'Wind: ' + wind + (dir ? ' ' + esc(dir) : '') + '<br>'
       + 'Grip: <strong>' + esc(grip) + '</strong>'
       + '</div></div>';
     L.marker([st.latitude, st.longitude], { icon: makeIcon(makeWeatherSvg(st.level_of_grip)) })
-      .bindPopup(popup, { maxWidth: 220 }).addTo(map);
+      .bindPopup(popup, { maxWidth: 240 }).addTo(map);
   });
 }());
 </script>"""
@@ -787,6 +799,7 @@ def render_message_boards_section(boards: list[dict]) -> str:
 def render_weather_card(station: dict) -> str:
     """Return HTML for one weather station card."""
     station_id = e(station.get("id") or "")
+    location = station.get("location") or ""
     level = station.get("level_of_grip") or ""
     cls = _grip_class(level)
     badge_cls = f"grip-badge {cls}" if cls else "grip-badge"
@@ -842,12 +855,18 @@ def render_weather_card(station: dict) -> str:
         else ""
     )
 
+    location_html = (
+        f'<div class="wx-location">{e(location)}</div>'
+        if location else ""
+    )
+
     return (
         f'<div class="{card_cls}">'
         f'<div class="wx-card-header">'
         f'<span class="wx-station-id">Station #{station_id}</span>'
         f'<span class="{badge_cls}">{grip_label}</span>'
         f"</div>"
+        f"{location_html}"
         f"{temp_html}"
         f'<div class="wx-stats">{stats_html}</div>'
         f"{updated_html}"
@@ -973,6 +992,19 @@ def build(
     total = sum(len(v) for v in roadways.values())
     boards = load_message_boards_data(boards_path)
     stations = load_weather_stations_data(weather_path)
+
+    # Correlate weather stations with camera locations via shared ADOT source_id.
+    source_id_to_location = {
+        cam["source_id"]: cam["location"]
+        for cam in cameras
+        if cam.get("source_id")
+    }
+    for station in stations:
+        if not station.get("location"):
+            station["location"] = source_id_to_location.get(
+                station.get("camera_source_id")
+            )
+
     html = render_page(roadways, total, boards, stations)
     Path(output_path).write_text(html, encoding="utf-8")
     print(
