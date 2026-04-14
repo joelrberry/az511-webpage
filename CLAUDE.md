@@ -102,4 +102,4 @@ Weather stations are correlated to cameras via a shared ADOT UUID:
 
 ## Weather temperature note
 
-The AZ511 API returns temperatures in **Celsius**. Both the Python card renderer (`render_weather_card`) and the JS map popup convert to Fahrenheit for display.
+The AZ511 API returns temperatures in **Fahrenheit** already. No conversion is needed — values are rounded and displayed with a °F suffix directly.

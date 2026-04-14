@@ -631,10 +631,10 @@ class TestRenderWeatherCard:
         html = render_weather_card(station)
         assert "grip-icy" in html
 
-    def test_temperature_displayed_as_fahrenheit(self, sample_station):
-        # 22°C → ~71.6°F → rounded to 72
+    def test_temperature_displayed(self, sample_station):
+        # 22.0°F displayed directly (API already returns Fahrenheit)
         html = render_weather_card(sample_station)
-        assert "72" in html
+        assert "22" in html
 
     def test_no_crash_on_all_none_fields(self, sample_station_no_data):
         html = render_weather_card(sample_station_no_data)

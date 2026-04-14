@@ -714,8 +714,8 @@ _MAP_JS_TEMPLATE = """\
 
   WEATHER.forEach(function (st) {
     if (st.latitude == null || st.longitude == null) return;
-    var temp = st.air_temperature != null ? (st.air_temperature * 9/5 + 32).toFixed(0) + '\\u00b0F' : '--';
-    var surf = st.surface_temperature != null ? (st.surface_temperature * 9/5 + 32).toFixed(0) + '\\u00b0F' : '--';
+    var temp = st.air_temperature != null ? Math.round(st.air_temperature) + '\\u00b0F' : '--';
+    var surf = st.surface_temperature != null ? Math.round(st.surface_temperature) + '\\u00b0F' : '--';
     var wind = st.wind_speed != null ? st.wind_speed.toFixed(0) + ' mph' : '--';
     var dir  = st.wind_direction || '';
     var grip = st.level_of_grip || 'Unknown';
@@ -902,11 +902,11 @@ def render_weather_card(station: dict) -> str:
     card_cls = f"wx-card {cls}" if cls else "wx-card"
     grip_label = e(level) if level else "Unknown"
 
-    # Temperature: API returns Celsius, display as Fahrenheit
-    air_c = station.get("air_temperature")
-    surf_c = station.get("surface_temperature")
-    air_f = f"{air_c * 9 / 5 + 32:.0f}" if air_c is not None else None
-    surf_f = f"{surf_c * 9 / 5 + 32:.0f}" if surf_c is not None else None
+    # Temperature: API returns Fahrenheit directly
+    air_f_val = station.get("air_temperature")
+    surf_f_val = station.get("surface_temperature")
+    air_f = f"{air_f_val:.0f}" if air_f_val is not None else None
+    surf_f = f"{surf_f_val:.0f}" if surf_f_val is not None else None
 
     temp_html = (
         f'<div class="wx-temp">{e(air_f)}<span class="wx-temp-unit">&deg;F</span></div>'
